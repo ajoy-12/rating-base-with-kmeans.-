@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Run K-Means</title>
+  <style>
+    body { font-family: Consolas, monospace; background: #1a1a1f; color: #e2e8f0; padding: 2rem; margin: 0; }
+    h1 { font-size: 1.25rem; color: #a5b4fc; margin-bottom: 1rem; }
+    pre { background: #0d0d0f; padding: 1rem; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; }
+    .line { margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <h1>K-Means run output</h1>
+  <pre id="output"></pre>
+  <script>
+    const out = document.getElementById('output');
+    const log = (...args) => { out.appendChild(document.createTextNode(args.join(' ') + '\n')); };
+
+    const RATING_DATA = [
+      { name: 'Product A', ratings: [4.8, 4.2, 4.5] },
+      { name: 'Product B', ratings: [3.2, 4.8, 3.0] },
+      { name: 'Product C', ratings: [4.5, 3.5, 4.8] },
+      { name: 'Product D', ratings: [2.5, 2.8, 2.2] },
+      { name: 'Product E', ratings: [4.9, 4.0, 4.7] },
+      { name: 'Product F', ratings: [3.0, 4.5, 3.2] },
+      { name: 'Product G', ratings: [2.2, 2.0, 2.5] },
+      { name: 'Product H', ratings: [4.6, 4.4, 4.3] },
+      { name: 'Product I', ratings: [3.5, 3.8, 3.6] },
+      { name: 'Product J', ratings: [1.8, 2.2, 2.0] },
+      { name: 'Product K', ratings: [4.2, 3.9, 4.1] },
+      { name: 'Product L', ratings: [2.8, 3.2, 2.9] },
+      { name: 'Product M', ratings: [4.7, 4.6, 4.4] },
+      { name: 'Product N', ratings: [3.8, 4.1, 3.9] },
+      { name: 'Product O', ratings: [2.0, 2.5, 2.3] },
+    ];
+    function euclidean(a, b) {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
+      return Math.sqrt(sum);
+    }
+    function kmeans(points, k, maxIters = 100) {
+      const n = points.length, dim = points[0].length;
+      let centroids = [];
+      const used = new Set();
+      while (centroids.length < k) {
+        const i = Math.floor(Math.random() * n);
+        if (!used.has(i)) { used.add(i); centroids.push([...points[i]]); }
+      }
+      let assignments = new Array(n).fill(0);
+      for (let iter = 0; iter < maxIters; iter++) {
+        const newAssignments = points.map(p => {
+          let best = 0, bestDist = Infinity;
+          centroids.forEach((c, i) => {
+            const d = euclidean(p, c);
+            if (d < bestDist) { bestDist = d; best = i; }
+          });
+          return best;
+        });
+        let changed = false;
+        for (let i = 0; i < n; i++) {
+          if (newAssignments[i] !== assignments[i]) changed = true;
+          assignments[i] = newAssignments[i];
+        }
+        if (!changed) break;
+        const sums = Array.from({ length: k }, () => new Array(dim).fill(0));
+        const counts = new Array(k).fill(0);
+        for (let i = 0; i < n; i++) {
+          const c = assignments[i];
+          counts[c]++;
+          for (let d = 0; d < dim; d++) sums[c][d] += points[i][d];
+        }
+        for (let c = 0; c < k; c++)
+          for (let d = 0; d < dim; d++)
+            centroids[c][d] = counts[c] > 0 ? sums[c][d] / counts[c] : centroids[c][d];
+      }
+      return { assignments, centroids };
+    }
+
+    log('--- Running K-Means on rating data ---\n');
+    const k = 3;
+    const points = RATING_DATA.map(item => item.ratings);
+    const { assignments, centroids } = kmeans(points, k);
+    log('Centroids (Quality, Value, Design):');
+    centroids.forEach((c, i) => log('  Cluster ' + (i + 1) + ': [' + c.map(x => x.toFixed(2)).join(', ') + ']'));
+    log('\nAssignments:');
+    RATING_DATA.forEach((item, i) => { log('  ' + item.name + ' -> Cluster ' + (assignments[i] + 1)); });
+    log('\nDone.');
+  </script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rating-Based K-Means Clustering</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #1a1a1f;
+      --border: #2a2a32;
+      --text: #e8e8ed;
+      --muted: #8888a0;
+      --accent: #6366f1;
+      --accent-dim: #4f46e5;
+      --cluster-1: #22c55e;
+      --cluster-2: #f59e0b;
+      --cluster-3: #ef4444;
+      --cluster-4: #06b6d4;
+      --cluster-5: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #a5b4fc, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle { color: var(--muted); font-size: 0.95rem; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    label { color: var(--muted); font-size: 0.9rem; }
+    input[type="number"] {
+      width: 4rem;
+      padding: 0.5rem 0.6rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    button {
+      padding: 0.6rem 1.2rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: var(--accent-dim); }
+    .viz-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .viz-section h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    #chart-container {
+      position: relative;
+      width: 100%;
+      height: 400px;
+      background: var(--bg);
+      border-radius: 8px;
+    }
+    #scatter-canvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+      display: block;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 1rem;
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    td.cluster-cell { font-weight: 600; }
+    .rating-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      width: 80px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 0.5rem;
+    }
+    .rating-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--bg);
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Rating-Based K-Means Clustering</h1>
+      <p class="subtitle">Cluster items by their ratings — adjust K and rerun to explore.</p>
+    </header>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="k-input">Clusters (K):</label>
+        <input type="number" id="k-input" value="3" min="2" max="6">
+      </div>
+      <div class="control-group">
+        <button id="run-btn">Run K-Means</button>
+      </div>
+    </div>
+
+    <div class="viz-section">
+      <h2>Cluster visualization (Quality vs Value ratings)</h2>
+      <div id="chart-container">
+        <canvas id="scatter-canvas"></canvas>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="viz-section">
+      <h2>Summary</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="viz-section">
+      <h2>Items by cluster</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Quality</th>
+            <th>Value</th>
+            <th>Design</th>
+            <th>Cluster</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // Sample rating data: items with [quality, value, design] ratings (1-5)
+    const RATING_DATA = [
+      { name: 'Product A', ratings: [4.8, 4.2, 4.5] },
+      { name: 'Product B', ratings: [3.2, 4.8, 3.0] },
+      { name: 'Product C', ratings: [4.5, 3.5, 4.8] },
+      { name: 'Product D', ratings: [2.5, 2.8, 2.2] },
+      { name: 'Product E', ratings: [4.9, 4.0, 4.7] },
+      { name: 'Product F', ratings: [3.0, 4.5, 3.2] },
+      { name: 'Product G', ratings: [2.2, 2.0, 2.5] },
+      { name: 'Product H', ratings: [4.6, 4.4, 4.3] },
+      { name: 'Product I', ratings: [3.5, 3.8, 3.6] },
+      { name: 'Product J', ratings: [1.8, 2.2, 2.0] },
+      { name: 'Product K', ratings: [4.2, 3.9, 4.1] },
+      { name: 'Product L', ratings: [2.8, 3.2, 2.9] },
+      { name: 'Product M', ratings: [4.7, 4.6, 4.4] },
+      { name: 'Product N', ratings: [3.8, 4.1, 3.9] },
+      { name: 'Product O', ratings: [2.0, 2.5, 2.3] },
+    ];
+
+    const CLUSTER_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899'];
+
+    function euclidean(a, b) {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
+      return Math.sqrt(sum);
+    }
+
+    function kmeans(points, k, maxIters = 100) {
+      const n = points.length;
+      const dim = points[0].length;
+      let centroids = [];
+      const used = new Set();
+      while (centroids.length < k) {
+        const i = Math.floor(Math.random() * n);
+        if (!used.has(i)) {
+          used.add(i);
+          centroids.push([...points[i]]);
+        }
+      }
+      let assignments = new Array(n).fill(0);
+
+      for (let iter = 0; iter < maxIters; iter++) {
+        const newAssignments = points.map(p => {
+          let best = 0;
+          let bestDist = Infinity;
+          centroids.forEach((c, i) => {
+            const d = euclidean(p, c);
+            if (d < bestDist) {
+              bestDist = d;
+              best = i;
+            }
+          });
+          return best;
+        });
+
+        let changed = false;
+        for (let i = 0; i < n; i++) {
+          if (newAssignments[i] !== assignments[i]) changed = true;
+          assignments[i] = newAssignments[i];
+        }
+        if (!changed) break;
+
+        const sums = Array.from({ length: k }, () => new Array(dim).fill(0));
+        const counts = new Array(k).fill(0);
+        for (let i = 0; i < n; i++) {
+          const c = assignments[i];
+          counts[c]++;
+          for (let d = 0; d < dim; d++) sums[c][d] += points[i][d];
+        }
+        for (let c = 0; c < k; c++) {
+          for (let d = 0; d < dim; d++) {
+            centroids[c][d] = counts[c] > 0 ? sums[c][d] / counts[c] : centroids[c][d];
+          }
+        }
+      }
+      return { assignments, centroids };
+    }
+
+    function drawChart(items, assignments, centroids) {
+      const canvas = document.getElementById('scatter-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const w = rect.width;
+      const h = rect.height;
+      const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+      const xMin = 0, xMax = 5, yMin = 0, yMax = 5;
+      const xScale = (v) => padding.left + ((v - xMin) / (xMax - xMin)) * (w - padding.left - padding.right);
+      const yScale = (v) => h - padding.bottom - ((v - yMin) / (yMax - yMin)) * (h - padding.top - padding.bottom);
+
+      ctx.fillStyle = '#0f0f12';
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid
+      ctx.strokeStyle = '#2a2a32';
+      ctx.lineWidth = 0.5;
+      for (let v = 1; v <= 4; v++) {
+        ctx.beginPath();
+        ctx.moveTo(xScale(v), padding.top);
+        ctx.lineTo(xScale(v), h - padding.bottom);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(padding.left, yScale(v));
+        ctx.lineTo(w - padding.right, yScale(v));
+        ctx.stroke();
+      }
+
+      // Axes
+      ctx.strokeStyle = '#8888a0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, padding.top);
+      ctx.lineTo(padding.left, h - padding.bottom);
+      ctx.lineTo(w - padding.right, h - padding.bottom);
+      ctx.stroke();
+      ctx.fillStyle = '#8888a0';
+      ctx.font = '12px DM Sans';
+      ctx.textAlign = 'center';
+      ctx.fillText('Quality', (padding.left + w - padding.right) / 2, h - 8);
+      ctx.save();
+      ctx.translate(12, (padding.top + h - padding.bottom) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Value', 0, 0);
+      ctx.restore();
+
+      // Centroids (larger, with border)
+      centroids.forEach((c, i) => {
+        const color = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(xScale(c[0]), yScale(c[1]), 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+
+      // Points
+      items.forEach((item, i) => {
+        const color = CLUSTER_COLORS[assignments[i] % CLUSTER_COLORS.length];
+        const x = xScale(item.ratings[0]);
+        const y = yScale(item.ratings[1]);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+    }
+
+    function renderLegend(k) {
+      const el = document.getElementById('legend');
+      el.innerHTML = Array.from({ length: k }, (_, i) =>
+        `<div class="legend-item">
+          <span class="legend-dot" style="background:${CLUSTER_COLORS[i]}"></span>
+          Cluster ${i + 1}
+        </div>`
+      ).join('');
+    }
+
+    function renderStats(assignments, k) {
+      const counts = new Array(k).fill(0);
+      assignments.forEach(c => counts[c]++);
+      const el = document.getElementById('stats');
+      el.innerHTML = [
+        `<div class="stat-card"><div class="stat-value">${assignments.length}</div><div class="stat-label">Total items</div></div>`,
+        `<div class="stat-card"><div class="stat-value">${k}</div><div class="stat-label">Clusters</div></div>`,
+        ...counts.map((c, i) =>
+          `<div class="stat-card"><div class="stat-value" style="color:${CLUSTER_COLORS[i]}">${c}</div><div class="stat-label">Cluster ${i + 1}</div></div>`
+        )
+      ].join('');
+    }
+
+    function renderTable(items, assignments) {
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = items.map((item, i) => {
+        const c = assignments[i];
+        const color = CLUSTER_COLORS[c % CLUSTER_COLORS.length];
+        const [q, v, d] = item.ratings;
+        const pct = (r) => (r / 5) * 100;
+        return `<tr>
+          <td>${item.name}</td>
+          <td>${q.toFixed(1)} <span class="rating-bar"><span class="rating-fill" style="width:${pct(q)}%;background:${color}"></span></span></td>
+          <td>${v.toFixed(1)} <span class="rating-bar"><span class="rating-fill" style="width:${pct(v)}%;background:${color}"></span></span></td>
+          <td>${d.toFixed(1)} <span class="rating-bar"><span class="rating-fill" style="width:${pct(d)}%;background:${color}"></span></span></td>
+          <td class="cluster-cell" style="color:${color}">Cluster ${c + 1}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function run() {
+      const k = Math.min(6, Math.max(2, parseInt(document.getElementById('k-input').value, 10) || 3));
+      document.getElementById('k-input').value = k;
+      const points = RATING_DATA.map(item => item.ratings);
+      const { assignments, centroids } = kmeans(points, k);
+      drawChart(RATING_DATA, assignments, centroids);
+      renderLegend(k);
+      renderStats(assignments, k);
+      renderTable(RATING_DATA, assignments);
+    }
+
+    document.getElementById('run-btn').addEventListener('click', run);
+    run();
+  </script>
+</body>
+</html>
